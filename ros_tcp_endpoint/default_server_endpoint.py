@@ -6,6 +6,7 @@ from ros_tcp_endpoint import TcpServer
 
 
 def main(args=None):
+    print(args)
     rclpy.init(args=args)
     tcp_server = TcpServer("UnityEndpoint")
 

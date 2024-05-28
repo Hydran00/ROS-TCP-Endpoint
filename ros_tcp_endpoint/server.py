@@ -47,24 +47,23 @@ class TcpServer(Node):
             connections:             Max number of queued connections. See Python Socket documentation
         """
         super().__init__(node_name)
-
+        self.declare_parameter("interface", "eno1")
         self.declare_parameter("ROS_IP", "0.0.0.0")
         self.declare_parameter("ROS_TCP_PORT", 10000)
-
         if tcp_ip:
             self.loginfo("Using ROS_IP override from constructor: {}".format(tcp_ip))
             self.tcp_ip = tcp_ip
         else:
             self.tcp_ip = self.get_parameter("ROS_IP").get_parameter_value().string_value
-
         if tcp_port:
             self.loginfo("Using ROS_TCP_PORT override from constructor: {}".format(tcp_port))
             self.tcp_port = tcp_port
         else:
             self.tcp_port = self.get_parameter("ROS_TCP_PORT").get_parameter_value().integer_value
 
+        self.interface = self.get_parameter("interface").get_parameter_value().string_value
+        
         self.unity_tcp_sender = UnityTcpSender(self)
-
         self.node_name = node_name
         self.publishers_table = {}
         self.subscribers_table = {}
@@ -91,9 +90,11 @@ class TcpServer(Node):
             Creates and binds sockets using TCP variables then listens for incoming connections.
             For each new connection a client thread will be created to handle communication.
         """
-        self.loginfo("Starting server on {}:{}".format(self.tcp_ip, self.tcp_port))
+        self.loginfo("Starting server on {}:{} using interface: {}".format(self.tcp_ip, self.tcp_port, self.interface))
         tcp_server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        tcp_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        
+        tcp_server.setsockopt(socket.SOL_SOCKET, 25, str(self.interface + '\0').encode('utf-8'))
+        #tcp_server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         tcp_server.bind((self.tcp_ip, self.tcp_port))
 
         while True:
@@ -319,6 +320,11 @@ class SysCommands:
 
     def resolve_message_name(self, name, extension="msg"):
         try:
+            if len(name) < 1:
+                self.tcp_server.logerr(
+                    "Failed to resolve empty message name; if message is being registered before Start(), please specify ROS message name, or move registration to Start()."
+                )
+                return None
             names = name.split("/")
             module_name = names[0]
             class_name = names[1]
@@ -340,3 +346,4 @@ class SysCommands:
         except (IndexError, KeyError, AttributeError, ImportError) as e:
             self.tcp_server.logerr("Failed to resolve message name: {}".format(e))
             return None
+
